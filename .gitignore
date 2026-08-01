@@ -1,0 +1,10 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+
+# Sensitive - kabhi push mat karna!
+*.tfvars
+secrets.tf
