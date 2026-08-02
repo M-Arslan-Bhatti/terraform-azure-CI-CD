@@ -7,7 +7,9 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  TF_VERSION: '1.15.7'
+- group: vg-terraform-dev
+- name: TF_VERSION
+  value: '1.15.7'
 
 stages:
 
@@ -73,7 +75,10 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'plan'
-        commandOptions: '-var-file=environments/dev.tfvars'
+        commandOptions: >-
+          -var="environment=$(TF-ENVIRONMENT)"
+          -var="location=$(TF-LOCATION)"
+          -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 - stage: Apply
@@ -111,5 +116,8 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'apply'
-              commandOptions: '-var-file=environments/dev.tfvars'
+              commandOptions: >-
+                -var="environment=$(TF-ENVIRONMENT)"
+                -var="location=$(TF-LOCATION)"
+                -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
               environmentServiceNameAzureRM: 'azure-terraform-connection'
