@@ -12,46 +12,64 @@ variables:
 stages:
 
 - stage: Validate
-  displayName: 'Validate'
+  displayName: '1 - Terraform Validate'
   jobs:
   - job: Validate
+    displayName: 'Init and Validate'
     steps:
+
     - task: TerraformInstaller@1
+      displayName: 'Install Terraform'
       inputs:
         terraformVersion: $(TF_VERSION)
 
     - task: TerraformTaskV4@4
-      displayName: 'Init'
+      displayName: 'Terraform Init'
       inputs:
         provider: 'azurerm'
         command: 'init'
-        backendType: 'local'
+        backendType: 'azurerm'
+        backendServiceArm: 'azure-terraform-connection'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'starslanterraform001'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev.terraform.tfstate'
 
     - task: TerraformTaskV4@4
-      displayName: 'Validate'
+      displayName: 'Terraform Validate'
       inputs:
         provider: 'azurerm'
         command: 'validate'
+        environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 - stage: Plan
-  displayName: 'Plan'
+  displayName: '2 - Terraform Plan'
   dependsOn: Validate
+  condition: succeeded()
   jobs:
   - job: Plan
+    displayName: 'Terraform Plan'
     steps:
+
     - task: TerraformInstaller@1
+      displayName: 'Install Terraform'
       inputs:
         terraformVersion: $(TF_VERSION)
 
     - task: TerraformTaskV4@4
-      displayName: 'Init'
+      displayName: 'Terraform Init'
       inputs:
         provider: 'azurerm'
         command: 'init'
-        backendType: 'local'
+        backendType: 'azurerm'
+        backendServiceArm: 'azure-terraform-connection'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'starslanterraform001'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev.terraform.tfstate'
 
     - task: TerraformTaskV4@4
-      displayName: 'Plan'
+      displayName: 'Terraform Plan'
       inputs:
         provider: 'azurerm'
         command: 'plan'
@@ -59,28 +77,37 @@ stages:
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 - stage: Apply
-  displayName: 'Apply'
+  displayName: '3 - Terraform Apply'
   dependsOn: Plan
+  condition: succeeded()
   jobs:
   - deployment: Apply
+    displayName: 'Terraform Apply'
     environment: 'dev'
     strategy:
       runOnce:
         deploy:
           steps:
+
           - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
             inputs:
               terraformVersion: $(TF_VERSION)
 
           - task: TerraformTaskV4@4
-            displayName: 'Init'
+            displayName: 'Terraform Init'
             inputs:
               provider: 'azurerm'
               command: 'init'
-              backendType: 'local'
+              backendType: 'azurerm'
+              backendServiceArm: 'azure-terraform-connection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'starslanterraform001'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'dev.terraform.tfstate'
 
           - task: TerraformTaskV4@4
-            displayName: 'Apply'
+            displayName: 'Terraform Apply'
             inputs:
               provider: 'azurerm'
               command: 'apply'
