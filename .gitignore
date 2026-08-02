@@ -6,5 +6,4 @@
 crash.log
 
 # Sensitive - kabhi push mat karna!
-*.tfvars
 secrets.tf

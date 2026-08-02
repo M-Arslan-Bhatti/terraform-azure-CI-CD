@@ -33,3 +33,29 @@ variable "extra_tags" {
   default     = {}                 # Default empty map
                                    # Optional variable hai
 }
+
+# ═══════════════════════════════════════════════
+# EXISTING CODE UPAR HAI - YAHAN SE NAYA ADD KAO
+# ═══════════════════════════════════════════════
+
+# VNet CIDR variable
+# Poora network range
+variable "vnet_cidr" {
+  type        = string
+  description = "VNet address space"
+  default     = "10.0.0.0/16"
+}
+
+# Subnets variable
+# Map of subnets - naam aur CIDR
+variable "subnets" {
+  type = map(object({
+    cidr = string
+  }))
+  description = "Subnets to create in VNet"
+  default = {
+    web  = { cidr = "10.0.1.0/24" }
+    app  = { cidr = "10.0.2.0/24" }
+    data = { cidr = "10.0.3.0/24" }
+  }
+}

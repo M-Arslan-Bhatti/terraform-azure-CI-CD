@@ -15,7 +15,7 @@ pool:
 variables:
 - group: vg-terraform-dev    # Azure DevOps Library Group
                               # Key Vault se connected hai
-                              # TF-ENVIRONMENT, TF-LOCATION, TF-OWNER
+                              # TF-ENVIRONMENT, TF-LOCATION, TF-OWNER, TF-VNET-CIDR ← NAYA
 - name: TF_VERSION
   value: '1.15.7'            # Terraform version
                               # Local se match karna chahiye
@@ -120,6 +120,7 @@ stages:
     # $(TF-ENVIRONMENT) → Key Vault → "dev"
     # $(TF-LOCATION)    → Key Vault → "uksouth"
     # $(TF-OWNER)       → Key Vault → "arslan"
+    # $(TF-VNET-CIDR)   → Key Vault → "10.0.0.0/16" ← NAYA
     - task: TerraformTaskV4@4
       displayName: 'Terraform Plan'
       inputs:
@@ -129,6 +130,7 @@ stages:
           -var="environment=$(TF-ENVIRONMENT)"
           -var="location=$(TF-LOCATION)"
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
+          -var="vnet_cidr=$(TF-VNET-CIDR)"
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ───────────────────────────────────────────────
@@ -182,6 +184,7 @@ stages:
           # Actually Azure mein resources banata hai
           # Key Vault se variables inject hote hain
           # State file Storage Account mein save hoti hai
+          # $(TF-VNET-CIDR) → Key Vault → "10.0.0.0/16" ← NAYA
           - task: TerraformTaskV4@4
             displayName: 'Terraform Apply'
             inputs:
@@ -191,4 +194,5 @@ stages:
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
                 -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
+                -var="vnet_cidr=$(TF-VNET-CIDR)"
               environmentServiceNameAzureRM: 'azure-terraform-connection'
