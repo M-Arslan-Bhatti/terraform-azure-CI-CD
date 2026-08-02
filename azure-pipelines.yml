@@ -130,7 +130,7 @@ stages:
           -var="environment=$(TF-ENVIRONMENT)"
           -var="location=$(TF-LOCATION)"
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-          -var="vnet_cidr=$(TF-VNET-CIDR)"
+          -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ───────────────────────────────────────────────
@@ -194,5 +194,5 @@ stages:
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
                 -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-                -var="vnet_cidr=$(TF-VNET-CIDR)"
+                -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
               environmentServiceNameAzureRM: 'azure-terraform-connection'
