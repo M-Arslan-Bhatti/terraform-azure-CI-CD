@@ -1,18 +1,38 @@
 trigger:
   branches:
     include:
-      - main
+      - main          # Sirf main branch pe trigger hoga
+                      # Feature branches pe nahi
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'ubuntu-latest'   # Microsoft ka managed Linux runner
+                              # Free tier mein available
 
+# Variables Section
+# 2 tarike se variables aa rahe hain:
+# 1. Key Vault se (group)
+# 2. Direct value (name)
 variables:
-- group: vg-terraform-dev
+- group: vg-terraform-dev    # Azure DevOps Library Group
+                              # Key Vault se connected hai
+                              # TF-ENVIRONMENT, TF-LOCATION, TF-OWNER
 - name: TF_VERSION
-  value: '1.15.7'
+  value: '1.15.7'            # Terraform version
+                              # Local se match karna chahiye
 
+# ═══════════════════════════════════════════════
+# STAGES
+# Pipeline 3 stages mein divided hai
+# Ek stage fail → agle automatically skip
+# ═══════════════════════════════════════════════
 stages:
 
+# ───────────────────────────────────────────────
+# STAGE 1: VALIDATE
+# Sirf syntax check karta hai
+# Koi Azure resource nahi banata
+# Fast hota hai - 30-60 seconds
+# ───────────────────────────────────────────────
 - stage: Validate
   displayName: '1 - Terraform Validate'
   jobs:
@@ -20,41 +40,66 @@ stages:
     displayName: 'Init and Validate'
     steps:
 
+    # Step 1 - Code Checkout
+    # GitHub repo se code download karta hai
+    # Runner pe .tf files aati hain
+    - checkout: self
+
+    # Step 2 - Terraform Install
+    # Runner pe terraform nahi hota by default
+    # $(TF_VERSION) se version inject hota hai
     - task: TerraformInstaller@1
-      displayName: 'Install Terraform'
+      displayName: 'Install Terraform $(TF_VERSION)'
       inputs:
         terraformVersion: $(TF_VERSION)
 
+    # Step 3 - Terraform Init
+    # Provider download karta hai
+    # Remote backend se connect hota hai
+    # Storage Account mein state check karta hai
     - task: TerraformTaskV4@4
       displayName: 'Terraform Init'
       inputs:
-        provider: 'azurerm'
-        command: 'init'
-        backendType: 'azurerm'
-        backendServiceArm: 'azure-terraform-connection'
-        backendAzureRmResourceGroupName: 'rg-terraform-state'
-        backendAzureRmStorageAccountName: 'starslanterraform001'
-        backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'dev.terraform.tfstate'
+        provider: 'azurerm'                    # Azure provider
+        command: 'init'                        # Init command
+        backendType: 'azurerm'                 # Remote backend type
+        backendServiceArm: 'azure-terraform-connection'          # Service Connection
+        backendAzureRmResourceGroupName: 'rg-terraform-state'    # State ka RG
+        backendAzureRmStorageAccountName: 'starslanterraform001' # Storage Account
+        backendAzureRmContainerName: 'tfstate'                   # Container naam
+        backendAzureRmKey: 'dev.terraform.tfstate'               # State file naam
 
+    # Step 4 - Terraform Validate
+    # .tf files ka syntax check karta hai
+    # Variables sahi hain? Resources sahi define?
     - task: TerraformTaskV4@4
       displayName: 'Terraform Validate'
       inputs:
         provider: 'azurerm'
-        command: 'validate'
+        command: 'validate'                    # Validate command
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
+# ───────────────────────────────────────────────
+# STAGE 2: PLAN
+# Kya banega preview dikhata hai
+# Actual kuch nahi banata Azure mein
+# dependsOn: Validate → sirf pass hone pe chalega
+# ───────────────────────────────────────────────
 - stage: Plan
   displayName: '2 - Terraform Plan'
-  dependsOn: Validate
-  condition: succeeded()
+  dependsOn: Validate          # Validate fail → Plan skip
+  condition: succeeded()       # Sirf success pe aage badho
   jobs:
   - job: Plan
     displayName: 'Terraform Plan'
     steps:
 
+    # Code Checkout - har stage mein zaroori
+    # Fresh workspace hota hai har stage ka
+    - checkout: self
+
     - task: TerraformInstaller@1
-      displayName: 'Install Terraform'
+      displayName: 'Install Terraform $(TF_VERSION)'
       inputs:
         terraformVersion: $(TF_VERSION)
 
@@ -70,6 +115,11 @@ stages:
         backendAzureRmContainerName: 'tfstate'
         backendAzureRmKey: 'dev.terraform.tfstate'
 
+    # Terraform Plan
+    # commandOptions mein Key Vault se variables inject hote hain
+    # $(TF-ENVIRONMENT) → Key Vault → "dev"
+    # $(TF-LOCATION)    → Key Vault → "uksouth"
+    # $(TF-OWNER)       → Key Vault → "arslan"
     - task: TerraformTaskV4@4
       displayName: 'Terraform Plan'
       inputs:
@@ -81,21 +131,38 @@ stages:
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
+# ───────────────────────────────────────────────
+# STAGE 3: APPLY
+# Actually Azure mein resources banata hai
+# deployment type use kiya hai
+# Environment "dev" ke saath → Manual approval gate
+# dependsOn: Plan → sirf plan pass hone pe
+# ───────────────────────────────────────────────
 - stage: Apply
   displayName: '3 - Terraform Apply'
-  dependsOn: Plan
+  dependsOn: Plan              # Plan fail → Apply skip
   condition: succeeded()
   jobs:
+
+  # deployment → job se alag hai
+  # environment ke saath kaam karta hai
+  # Manual approval gate lagta hai "dev" environment pe
   - deployment: Apply
     displayName: 'Terraform Apply'
-    environment: 'dev'
+    environment: 'dev'         # DevOps Environment
+                               # Yahan approval gate lagta hai
     strategy:
-      runOnce:
+      runOnce:                 # Ek baar chalao
         deploy:
           steps:
 
+          # ZAROORI HAI - deployment job mein
+          # .tf files automatic nahi aati
+          # checkout: self se GitHub se code aata hai
+          - checkout: self
+
           - task: TerraformInstaller@1
-            displayName: 'Install Terraform'
+            displayName: 'Install Terraform $(TF_VERSION)'
             inputs:
               terraformVersion: $(TF_VERSION)
 
@@ -111,6 +178,10 @@ stages:
               backendAzureRmContainerName: 'tfstate'
               backendAzureRmKey: 'dev.terraform.tfstate'
 
+          # Terraform Apply
+          # Actually Azure mein resources banata hai
+          # Key Vault se variables inject hote hain
+          # State file Storage Account mein save hoti hai
           - task: TerraformTaskV4@4
             displayName: 'Terraform Apply'
             inputs:
