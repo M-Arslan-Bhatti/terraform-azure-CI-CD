@@ -42,6 +42,12 @@ resource "azurerm_application_gateway" "portal" {
 
   firewall_policy_id = azurerm_web_application_firewall_policy.portal.id
 
+  # Modern TLS policy - deprecated version se bachne ke liye
+  ssl_policy {
+    policy_type = "Predefined"
+    policy_name = "AppGwSslPolicy20220101S"
+  }
+
   autoscale_configuration {
     min_capacity = 2
     max_capacity = 6
