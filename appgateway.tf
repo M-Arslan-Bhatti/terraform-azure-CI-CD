@@ -1,8 +1,3 @@
-# ═══════════════════════════════════════════════
-# LAB 5 — APPLICATION GATEWAY AND WAF
-# Layer 7 Load Balancer + Web Application Firewall
-# ═══════════════════════════════════════════════
-
 resource "azurerm_public_ip" "appgw" {
   name                = "pip-appgw-${local.prefix}"
   location            = azurerm_resource_group.app.location
@@ -10,6 +5,28 @@ resource "azurerm_public_ip" "appgw" {
   allocation_method   = "Static"
   sku                 = "Standard"
   tags                = local.tags
+}
+
+resource "azurerm_web_application_firewall_policy" "portal" {
+  name                = "wafpolicy-${local.prefix}"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  tags                = local.tags
+
+  policy_settings {
+    enabled                     = true
+    mode                        = "Detection"
+    request_body_check          = true
+    file_upload_limit_in_mb     = 100
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+    }
+  }
 }
 
 resource "azurerm_application_gateway" "portal" {
@@ -23,14 +40,7 @@ resource "azurerm_application_gateway" "portal" {
     tier = "WAF_v2"
   }
 
-  # WAF_v2 tier ke liye YEH ZAROORI HAI
-  # Bina isके "must have a valid WAF policy" error aata hai
-  waf_configuration {
-    enabled          = true
-    firewall_mode    = "Detection"
-    rule_set_type    = "OWASP"
-    rule_set_version = "3.2"
-  }
+  firewall_policy_id = azurerm_web_application_firewall_policy.portal.id
 
   autoscale_configuration {
     min_capacity = 2
