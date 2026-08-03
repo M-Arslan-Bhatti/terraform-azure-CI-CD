@@ -34,10 +34,6 @@ variable "extra_tags" {
                                    # Optional variable hai
 }
 
-# ═══════════════════════════════════════════════
-# EXISTING CODE UPAR HAI - YAHAN SE NAYA ADD KAO
-# ═══════════════════════════════════════════════
-
 # VNet CIDR variable
 # Poora network range
 variable "vnet_cidr" {
@@ -48,15 +44,17 @@ variable "vnet_cidr" {
 
 # Subnets variable
 # Map of subnets - naam aur CIDR
+# appgw subnet App Gateway (Lab 5) ke liye zaroori hai
 variable "subnets" {
   type = map(object({
     cidr = string
   }))
   description = "Subnets to create in VNet"
   default = {
-    web  = { cidr = "10.0.1.0/24" }
-    app  = { cidr = "10.0.2.0/24" }
-    data = { cidr = "10.0.3.0/24" }
+    web   = { cidr = "10.0.1.0/24" }
+    app   = { cidr = "10.0.2.0/24" }
+    data  = { cidr = "10.0.3.0/24" }
+    appgw = { cidr = "10.0.4.0/24" }   # ← App Gateway ka dedicated subnet
   }
 }
 
@@ -78,18 +76,5 @@ variable "nsg_ports" {
     http  = "80"     # Standard HTTP
     app   = "8080"   # Common app port
     db    = "1433"   # SQL Server default port
-  }
-}
-
-variable "subnets" {
-  type = map(object({
-    cidr = string
-  }))
-  description = "Subnets to create"
-  default = {
-    web   = { cidr = "10.0.1.0/24" }
-    app   = { cidr = "10.0.2.0/24" }
-    data  = { cidr = "10.0.3.0/24" }
-    appgw = { cidr = "10.0.4.0/24" }  # ← NAYA - App Gateway ke liye
   }
 }
