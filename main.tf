@@ -268,3 +268,35 @@ resource "azurerm_subnet_route_table_association" "data" {
   subnet_id      = azurerm_subnet.this["data"].id
   route_table_id = azurerm_route_table.data.id
 }
+
+# ═══════════════════════════════════════════════
+# LAB 4 — PUBLIC IP
+# Load Balancer ke liye static public IP
+# Standard SKU production ke liye zaroori hai
+# ═══════════════════════════════════════════════
+resource "azurerm_public_ip" "lb" {
+  name                = "pip-lb-${local.prefix}"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = local.tags
+}
+
+# ═══════════════════════════════════════════════
+# LAB 4 — LOAD BALANCER
+# Layer-4 traffic distribute karta hai
+# Frontend IP config Public IP se linked hai
+# ═══════════════════════════════════════════════
+resource "azurerm_lb" "app" {
+  name                = "lb-${local.prefix}"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  sku                 = "Standard"
+  tags                = local.tags
+
+  frontend_ip_configuration {
+    name                 = "public"
+    public_ip_address_id = azurerm_public_ip.lb.id
+  }
+}
