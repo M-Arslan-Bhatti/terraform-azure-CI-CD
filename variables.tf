@@ -51,10 +51,12 @@ variable "subnets" {
   }))
   description = "Subnets to create in VNet"
   default = {
-    web   = { cidr = "10.0.1.0/24" }
-    app   = { cidr = "10.0.2.0/24" }
-    data  = { cidr = "10.0.3.0/24" }
-    appgw = { cidr = "10.0.4.0/24" }   # ← App Gateway ka dedicated subnet
+    web                 = { cidr = "10.0.1.0/24" }
+    app                 = { cidr = "10.0.2.0/24" }
+    data                = { cidr = "10.0.3.0/24" }
+    appgw               = { cidr = "10.0.4.0/24" }
+    AzureBastionSubnet  = { cidr = "10.0.5.0/26" }   # ← YEH NAYI LINE
+    AzureFirewallSubnet = { cidr = "10.0.6.0/26" }   # ← YEH NAYI LINE
   }
 }
 
