@@ -1,0 +1,97 @@
+# ═══════════════════════════════════════════════
+# DESTROY PIPELINE
+# trigger: none → Kabhi automatic nahi chalti
+# Sirf manual "Run pipeline" se chalti hai
+# ═══════════════════════════════════════════════
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: vg-terraform-dev
+- name: TF_VERSION
+  value: '1.15.7'
+
+stages:
+
+# ─── STAGE 1: PREVIEW - Kya delete hoga, poori list dikhao ───
+- stage: DestroyPlan
+  displayName: '1 - Destroy Plan (Preview Only)'
+  jobs:
+  - job: PlanDestroy
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendType: 'azurerm'
+        backendServiceArm: 'azure-terraform-connection'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'starslanterraform001'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev.terraform.tfstate'
+
+    # Yeh step LOGS mein poori DELETE list dikhayega
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Plan Destroy (Check Logs Here!)'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        commandOptions: >-
+          -destroy
+          -var="environment=$(TF-ENVIRONMENT)"
+          -var="location=$(TF-LOCATION)"
+          -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
+          -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+        environmentServiceNameAzureRM: 'azure-terraform-connection'
+
+# ─── STAGE 2: ACTUAL DESTROY (Manual Approval Ke Saath) ───
+- stage: ExecuteDestroy
+  displayName: '2 - Execute Destroy'
+  dependsOn: DestroyPlan
+  condition: succeeded()
+  jobs:
+  - deployment: Destroy
+    displayName: 'Terraform Destroy'
+    environment: 'dev-destroy'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendType: 'azurerm'
+              backendServiceArm: 'azure-terraform-connection'
+              backendAzureRmResourceGroupName: 'rg-terraform-state'
+              backendAzureRmStorageAccountName: 'starslanterraform001'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'dev.terraform.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Destroy'
+            inputs:
+              provider: 'azurerm'
+              command: 'destroy'
+              commandOptions: >-
+                -var="environment=$(TF-ENVIRONMENT)"
+                -var="location=$(TF-LOCATION)"
+                -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
+                -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+              environmentServiceNameAzureRM: 'azure-terraform-connection'
