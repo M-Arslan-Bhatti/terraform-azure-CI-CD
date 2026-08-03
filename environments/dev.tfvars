@@ -29,3 +29,10 @@ subnets = {
   app  = { cidr = "10.0.2.0/24" }
   data = { cidr = "10.0.3.0/24" }
 }
+# LAB 3 — NSG Ports
+nsg_ports = {
+  https = "443"
+  http  = "80"
+  app   = "8080"
+  db    = "1433"
+}

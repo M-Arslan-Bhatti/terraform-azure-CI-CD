@@ -59,3 +59,24 @@ variable "subnets" {
     data = { cidr = "10.0.3.0/24" }
   }
 }
+
+# ═══════════════════════════════════════════════
+# LAB 3 — NSG PORTS VARIABLE
+# Environment-dependent port numbers
+# dev/qa/prod mein alag ho sakte hain
+# ═══════════════════════════════════════════════
+variable "nsg_ports" {
+  type = object({
+    https = string   # Web tier - HTTPS traffic
+    http  = string   # Web tier - HTTP traffic
+    app   = string   # App tier - Application port
+    db    = string   # Data tier - Database port
+  })
+  description = "NSG port numbers for each tier"
+  default = {
+    https = "443"    # Standard HTTPS
+    http  = "80"     # Standard HTTP
+    app   = "8080"   # Common app port
+    db    = "1433"   # SQL Server default port
+  }
+}
