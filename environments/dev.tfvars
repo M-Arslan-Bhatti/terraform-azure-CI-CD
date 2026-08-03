@@ -36,3 +36,11 @@ nsg_ports = {
   app   = "8080"
   db    = "1433"
 }
+
+subnets = {
+  web   = { cidr = "10.0.1.0/24" }
+  app   = { cidr = "10.0.2.0/24" }
+  data  = { cidr = "10.0.3.0/24" }
+  appgw = { cidr = "10.0.4.0/24" }
+}
+

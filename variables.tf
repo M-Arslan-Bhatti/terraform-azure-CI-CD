@@ -80,3 +80,16 @@ variable "nsg_ports" {
     db    = "1433"   # SQL Server default port
   }
 }
+
+variable "subnets" {
+  type = map(object({
+    cidr = string
+  }))
+  description = "Subnets to create"
+  default = {
+    web   = { cidr = "10.0.1.0/24" }
+    app   = { cidr = "10.0.2.0/24" }
+    data  = { cidr = "10.0.3.0/24" }
+    appgw = { cidr = "10.0.4.0/24" }  # ← NAYA - App Gateway ke liye
+  }
+}
