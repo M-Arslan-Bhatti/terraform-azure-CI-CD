@@ -4,15 +4,19 @@ trigger:
       - main          # Sirf main branch pe trigger hoga
                       # Feature branches pe nahi
 
-# pr: none → EXPLICITLY zaroori hai. Bina is line ke Azure DevOps
-# khud-ba-khud is pipeline ko HAR PR pe (kisi bhi branch ke against)
-# chala deta hai - "trigger:" sirf CI/push trigger control karta hai,
-# PR trigger alag hota hai aur default "on" hota hai jab tak explicitly
-# na roka jaye. (Real incident: isi wajah se destroy pipeline + ye
-# pipeline dono ek PR pe race kar gaye the aur state-lock error aaya.)
-# Jab Phase 2 mein sochi-samjhi PR-validation pipeline banayenge,
-# tab yahan explicit "pr:" section (sirf Validate+Plan stages) design karenge.
-pr: none
+# pr: EXPLICITLY zaroori hai (bina "pr:" ke Azure DevOps khud-ba-khud
+# is pipeline ko HAR PR pe chala deta hai - "trigger:" sirf CI/push
+# control karta hai, PR trigger alag hota hai). Yahan explicitly sirf
+# "main" ke against PRs pe chalne diya hai - ye safe hai kyunki Apply
+# stage already 'dev' environment ke manual-approval gate ke peeche hai,
+# isliye PR pe chalne se koi cheez accidentally deploy nahi hoti, bas
+# Validate/TFLint/Checkov/Plan/Infracost chalte hain jo GitHub branch
+# ruleset ke "Required status checks" ke liye chahiye (merge ko gate
+# karne ke liye).
+pr:
+  branches:
+    include:
+      - main
 
 pool:
   vmImage: 'ubuntu-latest'   # Microsoft ka managed Linux runner
