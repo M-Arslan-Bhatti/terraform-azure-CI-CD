@@ -3,6 +3,8 @@ trigger:
     include:
       - main          # Sirf main branch pe trigger hoga
                       # Feature branches pe nahi
+                      # NOTE: PR builds trigger nahi hote is setup mein
+                      # (Infracost PR-comment step neeche isi wajah se optional/best-effort hai)
 
 pool:
   vmImage: 'ubuntu-latest'   # Microsoft ka managed Linux runner
@@ -15,15 +17,17 @@ pool:
 variables:
 - group: vg-terraform-dev    # Azure DevOps Library Group
                               # Key Vault se connected hai
-                              # TF-ENVIRONMENT, TF-LOCATION, TF-OWNER, TF-VNET-CIDR ← NAYA
+                              # TF-ENVIRONMENT, TF-LOCATION, TF-OWNER, TF-VNET-CIDR
+                              # INFRACOST-API-KEY ← NAYA (secret ke tor pe add hui hai)
 - name: TF_VERSION
   value: '1.15.7'            # Terraform version
                               # Local se match karna chahiye
 
 # ═══════════════════════════════════════════════
 # STAGES
-# Pipeline 3 stages mein divided hai
-# Ek stage fail → agle automatically skip
+# Pipeline ab 7 stages mein divided hai:
+# Validate → TFLint → Checkov → Plan → Infracost → Apply → Terraform-Docs
+# Ek stage fail → agle automatically skip (condition: succeeded())
 # ═══════════════════════════════════════════════
 stages:
 
@@ -62,12 +66,13 @@ stages:
       inputs:
         provider: 'azurerm'                    # Azure provider
         command: 'init'                        # Init command
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'  # NAYA: module refactor ke baad .tf files yahan hain, root mein nahi
         backendType: 'azurerm'                 # Remote backend type
         backendServiceArm: 'azure-terraform-connection'          # Service Connection
         backendAzureRmResourceGroupName: 'rg-terraform-state'    # State ka RG
         backendAzureRmStorageAccountName: 'starslanterraform001' # Storage Account
         backendAzureRmContainerName: 'tfstate'                   # Container naam
-        backendAzureRmKey: 'dev.terraform.tfstate'               # State file naam
+        backendAzureRmKey: 'dev-v2.terraform.tfstate'            # NAYA: environments/dev/backend.tf ka actual key
 
     # Step 4 - Terraform Validate
     # .tf files ka syntax check karta hai
@@ -77,18 +82,99 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'validate'                    # Validate command
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ───────────────────────────────────────────────
-# STAGE 2: PLAN
+# STAGE 2: TFLINT
+# Terraform code ki "best practice" linting karta hai
+# (unused variables, naming conventions, provider-specific
+# mistakes jaise wrong VM size, deprecated arguments, etc.)
+# Validate se alag hai - Validate sirf syntax dekhta hai,
+# TFLint "code quality" dekhta hai
+# Learning phase hai isliye issues sirf warning ke tor pe
+# dikhaye jayenge, pipeline FAIL nahi hogi abhi
+# ───────────────────────────────────────────────
+- stage: TFLint
+  displayName: '2 - TFLint (Code Quality Check)'
+  dependsOn: Validate           # Validate fail → TFLint skip
+  condition: succeeded()
+  jobs:
+  - job: TFLint
+    displayName: 'Run TFLint'
+    steps:
+
+    - checkout: self
+
+    # TFLint install karo
+    # Official install script use kar rahe hain - GitHub se
+    # seedha "bash" mein pipe karke chala dete hain
+    - script: |
+        curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+      displayName: 'Install TFLint'
+
+    # tflint --init → plugins (jaise azurerm ruleset) download karta hai
+    # tflint → actual linting chalata hai environments/dev folder pe
+    # workingDirectory zaroori hai taake sirf dev environment
+    # ki files check hon, poora repo nahi
+    #
+    # continueOnError HATA diya — koi bhi lint issue mile to
+    # pipeline FAIL hogi. Enterprise standard: code-quality
+    # issues merge se pehle fix karne zaroori hain, warning nahi.
+    - script: |
+        tflint --init
+        tflint
+      displayName: 'Run TFLint Checks (hard-fail)'
+      workingDirectory: environments/dev
+
+# ───────────────────────────────────────────────
+# STAGE 3: CHECKOV
+# Security & compliance scanner hai - misconfigurations
+# dhoondta hai jaise: public storage account, NSG mein
+# 0.0.0.0/0 se SSH/RDP open, encryption disabled, etc.
+# TFLint code-quality dekhta hai, Checkov SECURITY dekhta hai
+#
+# Hard-fail hai: koi bhi security misconfiguration mile
+# (chahe LOW severity) pipeline turant FAIL hogi.
+# ───────────────────────────────────────────────
+- stage: Checkov
+  displayName: '3 - Checkov (Security & Compliance Scan)'
+  dependsOn: TFLint             # TFLint skip/fail → Checkov bhi skip
+  condition: succeeded()
+  jobs:
+  - job: Checkov
+    displayName: 'Run Checkov'
+    steps:
+
+    - checkout: self
+
+    # Checkov Python-based tool hai, pip se install hota hai
+    - script: pip install checkov
+      displayName: 'Install Checkov'
+
+    # -d environments/dev  → sirf dev environment scan karo
+    # --framework terraform → sirf terraform checks chalao
+    #                          (Checkov CloudFormation, K8s, etc.
+    #                          bhi support karta hai, humein sirf TF chahiye)
+    - script: checkov -d environments/dev --framework terraform
+      displayName: 'Run Checkov Scan (hard-fail)'
+
+# ───────────────────────────────────────────────
+# STAGE 4: PLAN
 # Kya banega preview dikhata hai
 # Actual kuch nahi banata Azure mein
-# dependsOn: Validate → sirf pass hone pe chalega
+# dependsOn: Checkov → sirf pass hone pe chalega
+#
+# -out=tfplan ← NAYA: plan ko file mein SAVE kar rahe hain
+# taake Infracost stage isi exact plan ko read kar sake
+# (agar -out na diya jaye to har baar naya/alag plan
+# generate ho sakta hai - cost estimate ka plan wahi hona
+# chahiye jo Apply mein use hoga)
 # ───────────────────────────────────────────────
 - stage: Plan
-  displayName: '2 - Terraform Plan'
-  dependsOn: Validate          # Validate fail → Plan skip
-  condition: succeeded()       # Sirf success pe aage badho
+  displayName: '4 - Terraform Plan'
+  dependsOn: Checkov
+  condition: succeeded()
   jobs:
   - job: Plan
     displayName: 'Terraform Plan'
@@ -108,41 +194,172 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         backendType: 'azurerm'
         backendServiceArm: 'azure-terraform-connection'
         backendAzureRmResourceGroupName: 'rg-terraform-state'
         backendAzureRmStorageAccountName: 'starslanterraform001'
         backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'dev.terraform.tfstate'
+        backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
     # Terraform Plan
     # commandOptions mein Key Vault se variables inject hote hain
     # $(TF-ENVIRONMENT) → Key Vault → "dev"
     # $(TF-LOCATION)    → Key Vault → "uksouth"
     # $(TF-OWNER)       → Key Vault → "arslan"
-    # $(TF-VNET-CIDR)   → Key Vault → "10.0.0.0/16" ← NAYA
+    # $(TF-VNET-CIDR)   → Key Vault → "10.0.0.0/16"
+    # -out=tfplan       → plan file save karo (Infracost isse use karega)
     - task: TerraformTaskV4@4
       displayName: 'Terraform Plan'
       inputs:
         provider: 'azurerm'
         command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
           -var="environment=$(TF-ENVIRONMENT)"
           -var="location=$(TF-LOCATION)"
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
           -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+          -out=tfplan
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
+    # tfplan file ko pipeline artifact ke tor pe publish kar rahe hain
+    # taake AGLI stage (Infracost - alag agent/job pe chalti hai)
+    # isko download kar ke use kar sake. Ek stage ki files
+    # dusri stage ko automatically nahi milti - isliye artifact zaroori hai
+    # NAYA: tfplan ab environments/dev/ ke andar bana hai (workingDirectory ki wajah se)
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish tfplan Artifact'
+      inputs:
+        targetPath: '$(System.DefaultWorkingDirectory)/environments/dev/tfplan'
+        artifact: 'tfplan'
+        publishLocation: 'pipeline'
+
 # ───────────────────────────────────────────────
-# STAGE 3: APPLY
+# STAGE 5: INFRACOST (ACTIVE)
+# Terraform plan ke basis pe MONTHLY CLOUD COST estimate
+# nikalta hai - Apply se PEHLE pata chal jata hai ke
+# yeh changes kitna kharcha karenge
+#
+# API Key vg-terraform-dev variable group mein secret ke
+# tor pe add ho chuki hai (Key Vault se link hai), isliye
+# hum yahan seedha $(INFRACOST-API-KEY) use kar sakte hain
+#
+# dependsOn: Plan → Plan ka saved tfplan file chahiye
+# ───────────────────────────────────────────────
+- stage: Infracost
+  displayName: '5 - Infracost (Cost Estimation)'
+  dependsOn: Plan
+  condition: succeeded()
+  jobs:
+  - job: Infracost
+    displayName: 'Run Infracost Cost Breakdown'
+    steps:
+
+    - checkout: self
+
+    # Plan stage se saved tfplan file download karo
+    # (yeh dobara build/plan nahi karega - EXACT wahi plan
+    # use hoga jo Apply mein bhi lagega)
+    # NAYA: environments/dev/ ke andar download karo taake tfplan
+    # wahin mile jahan Init/Show ke commands chalenge (workingDirectory match)
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download tfplan Artifact'
+      inputs:
+        artifact: 'tfplan'
+        path: '$(System.DefaultWorkingDirectory)/environments/dev'
+
+    - task: TerraformInstaller@1
+      displayName: 'Install Terraform $(TF_VERSION)'
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    # terraform show -json ke liye init zaroori hai
+    # (provider schema chahiye hoti hai plan ko JSON mein
+    # decode karne ke liye)
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Init (JSON conversion ke liye zaroori)'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+        backendType: 'azurerm'
+        backendServiceArm: 'azure-terraform-connection'
+        backendAzureRmResourceGroupName: 'rg-terraform-state'
+        backendAzureRmStorageAccountName: 'starslanterraform001'
+        backendAzureRmContainerName: 'tfstate'
+        backendAzureRmKey: 'dev-v2.terraform.tfstate'
+
+    # Saved plan (binary format) ko JSON mein convert karo
+    # Infracost sirf JSON format plan hi parhta hai
+    # workingDirectory zaroori hai taake tfplan (jo environments/dev
+    # mein download hui) yahin se milay
+    - script: terraform show -json tfplan > plan.json
+      displayName: 'Convert tfplan to plan.json'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+
+    # Infracost CLI install karo - official install script
+    - script: |
+        curl -sSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+      displayName: 'Install Infracost'
+
+    # API key configure karo
+    # NOTE: variable group ka variable "secret" hai, isliye
+    # macro syntax $(INFRACOST-API-KEY) seedha script body
+    # mein use NAHI hoga (Azure DevOps secrets ko macro-expand
+    # nahi karta scripts ke andar). Isliye "env:" mapping use
+    # karke ise OS environment variable ke tor pe pass kar rahe
+    # hain - yehi Microsoft ka recommended tareeqa hai secrets ke liye
+    - script: |
+        infracost configure set api_key $INFRACOST_API_KEY
+      displayName: 'Infracost API Key Configure Karo'
+      env:
+        INFRACOST_API_KEY: $(INFRACOST-API-KEY)
+
+    # Cost breakdown chalao - table pipeline logs mein clearly
+    # dikhega (resource-wise monthly cost + total)
+    # workingDirectory zaroori hai - plan.json environments/dev mein bani hai
+    - script: infracost breakdown --path plan.json
+      displayName: 'Infracost Cost Breakdown'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+
+    # OPTIONAL: PR comment ke tor pe bhi cost breakdown post karo
+    # NOTE: yeh sirf tab kaam karega jab:
+    #   1. Pipeline PR trigger se chali ho (abhi trigger sirf
+    #      "main" branch push pe hai, PR pe nahi - upar "trigger:"
+    #      section mein "pr:" add karna hoga isko fully activate karne ke liye)
+    #   2. Build service ko PR pe comment likhne ki permission ho
+    #      (Project Settings → Repositories → Security mein
+    #      "Contribute to pull requests" allow karna padega)
+    # continueOnError: true rakha hai taake agar yeh feature
+    # kisi wajah se available na ho to poori pipeline fail na ho -
+    # cost breakdown to upar logs mein already dikh chuka hoga
+    - script: |
+        infracost comment azure-repos \
+          --path plan.json \
+          --repo-url "$(Build.Repository.Uri)" \
+          --pull-request "$(System.PullRequest.PullRequestId)" \
+          --azure-access-token "$SYSTEM_ACCESSTOKEN" \
+          --behavior update
+      displayName: 'Infracost PR Comment (agar PR build ho)'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+      condition: eq(variables['Build.Reason'], 'PullRequest')
+      continueOnError: true
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+# ───────────────────────────────────────────────
+# STAGE 6: APPLY
 # Actually Azure mein resources banata hai
 # deployment type use kiya hai
 # Environment "dev" ke saath → Manual approval gate
-# dependsOn: Plan → sirf plan pass hone pe
+# dependsOn: Infracost → cost breakdown dekhne ke baad hi
+# reviewer approve karega (Infracost se pehle plan bhi
+# pass ho chuka hoga)
 # ───────────────────────────────────────────────
 - stage: Apply
-  displayName: '3 - Terraform Apply'
-  dependsOn: Plan              # Plan fail → Apply skip
+  displayName: '6 - Terraform Apply'
+  dependsOn: Infracost          # Infracost fail → Apply skip
   condition: succeeded()
   jobs:
 
@@ -173,26 +390,77 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               backendType: 'azurerm'
               backendServiceArm: 'azure-terraform-connection'
               backendAzureRmResourceGroupName: 'rg-terraform-state'
               backendAzureRmStorageAccountName: 'starslanterraform001'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
+              backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
           # Terraform Apply
           # Actually Azure mein resources banata hai
           # Key Vault se variables inject hote hain
           # State file Storage Account mein save hoti hai
-          # $(TF-VNET-CIDR) → Key Vault → "10.0.0.0/16" ← NAYA
+          # $(TF-VNET-CIDR) → Key Vault → "10.0.0.0/16"
           - task: TerraformTaskV4@4
             displayName: 'Terraform Apply'
             inputs:
               provider: 'azurerm'
               command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
                 -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
                 -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
               environmentServiceNameAzureRM: 'azure-terraform-connection'
+
+# ───────────────────────────────────────────────
+# STAGE 7: TERRAFORM-DOCS
+# modules/network module ki README.md automatically
+# generate karta hai (inputs, outputs, providers, resources
+# ki table) - taake documentation hamesha code ke sath
+# sync rahe, manually likhne ki zarurat na ho
+#
+# NOTE: README ko wapas repo mein commit/push karne ke bajaye
+# (jisme extra Git permissions/PAT setup chahiye hota hai)
+# hum ise sirf PIPELINE ARTIFACT ke tor pe save kar rahe hain -
+# yeh simpler hai. Agar baad mein auto-commit chahiye ho to
+# "checkout: self, persistCredentials: true" + git commit/push
+# steps add kiye ja sakte hain
+# ───────────────────────────────────────────────
+- stage: TerraformDocs
+  displayName: '7 - Terraform Docs (Auto Documentation)'
+  dependsOn: Apply
+  condition: succeeded()
+  jobs:
+  - job: TerraformDocs
+    displayName: 'Generate Module Documentation'
+    steps:
+
+    - checkout: self
+
+    # terraform-docs install karo (official release binary)
+    # NOTE: version pin ki hui hai (v0.19.0) - naya version
+    # chahiye ho to terraform-docs.io/dl se check kar lena
+    - script: |
+        curl -sSLo ./terraform-docs.tar.gz https://terraform-docs.io/dl/v0.19.0/terraform-docs-v0.19.0-linux-amd64.tar.gz
+        tar -xzf terraform-docs.tar.gz
+        chmod +x terraform-docs
+        sudo mv terraform-docs /usr/local/bin/terraform-docs
+      displayName: 'Install terraform-docs'
+
+    # modules/network folder scan karke README.md generate karo
+    # (variables.tf, outputs.tf, main.tf padh ke tables banata hai)
+    - script: terraform-docs markdown modules/network > modules/network/README.md
+      displayName: 'Generate README for modules/network'
+
+    # Generated README ko artifact ke tor pe publish karo
+    # taake Pipeline run se download/review ki ja sake
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Generated README Artifact'
+      inputs:
+        targetPath: 'modules/network/README.md'
+        artifact: 'network-module-docs'
+        publishLocation: 'pipeline'

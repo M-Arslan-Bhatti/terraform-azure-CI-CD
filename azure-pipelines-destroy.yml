@@ -32,12 +32,13 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'  # NAYA: module refactor ke baad .tf files yahan hain, root mein nahi
         backendType: 'azurerm'
         backendServiceArm: 'azure-terraform-connection'
         backendAzureRmResourceGroupName: 'rg-terraform-state'
         backendAzureRmStorageAccountName: 'starslanterraform001'
         backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'dev.terraform.tfstate'
+        backendAzureRmKey: 'dev-v2.terraform.tfstate'  # NAYA: environments/dev/backend.tf ka actual key
 
     # Yeh step LOGS mein poori DELETE list dikhayega
     - task: TerraformTaskV4@4
@@ -45,6 +46,7 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
           -destroy
           -var="environment=$(TF-ENVIRONMENT)"
@@ -77,18 +79,20 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               backendType: 'azurerm'
               backendServiceArm: 'azure-terraform-connection'
               backendAzureRmResourceGroupName: 'rg-terraform-state'
               backendAzureRmStorageAccountName: 'starslanterraform001'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
+              backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
           - task: TerraformTaskV4@4
             displayName: 'Terraform Destroy'
             inputs:
               provider: 'azurerm'
               command: 'destroy'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
