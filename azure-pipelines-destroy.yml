@@ -1,9 +1,16 @@
 # ═══════════════════════════════════════════════
 # DESTROY PIPELINE
-# trigger: none → Kabhi automatic nahi chalti
+# trigger: none → CI/push pe kabhi automatic nahi chalti
+# pr: none      → PR pe bhi kabhi automatic nahi chalti
+#                 (dono zaroori hain - "trigger: none" akela
+#                 PR-triggering ko nahi rokta, Azure DevOps
+#                 default se PR pe bhi chala deta hai agar
+#                 "pr:" explicitly na diya jaye. Real incident
+#                 isi gap ki wajah se hua tha.)
 # Sirf manual "Run pipeline" se chalti hai
 # ═══════════════════════════════════════════════
 trigger: none
+pr: none
 
 pool:
   vmImage: 'ubuntu-latest'

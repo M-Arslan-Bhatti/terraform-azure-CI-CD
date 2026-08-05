@@ -3,8 +3,16 @@ trigger:
     include:
       - main          # Sirf main branch pe trigger hoga
                       # Feature branches pe nahi
-                      # NOTE: PR builds trigger nahi hote is setup mein
-                      # (Infracost PR-comment step neeche isi wajah se optional/best-effort hai)
+
+# pr: none → EXPLICITLY zaroori hai. Bina is line ke Azure DevOps
+# khud-ba-khud is pipeline ko HAR PR pe (kisi bhi branch ke against)
+# chala deta hai - "trigger:" sirf CI/push trigger control karta hai,
+# PR trigger alag hota hai aur default "on" hota hai jab tak explicitly
+# na roka jaye. (Real incident: isi wajah se destroy pipeline + ye
+# pipeline dono ek PR pe race kar gaye the aur state-lock error aaya.)
+# Jab Phase 2 mein sochi-samjhi PR-validation pipeline banayenge,
+# tab yahan explicit "pr:" section (sirf Validate+Plan stages) design karenge.
+pr: none
 
 pool:
   vmImage: 'ubuntu-latest'   # Microsoft ka managed Linux runner
