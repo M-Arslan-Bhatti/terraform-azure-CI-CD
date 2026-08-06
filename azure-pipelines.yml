@@ -215,12 +215,16 @@ stages:
         backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
     # Terraform Plan
-    # -var-file=dev.tfvars → NAYA, zaroori hai. subnets aur nsg_ports
-    # (jinki koi default value nahi hai variables.tf mein) sirf isi
-    # file se milte hain - warna Terraform interactively poochta hai
-    # aur CI mein hang/cancel ho jata hai.
-    # -var flags neeche Key Vault se OVERRIDE ke tor pe chalte hain
-    # (dev.tfvars ke defaults ko override kar sakte hain agar chahiye ho)
+    # -var-file=dev.tfvars → SIRF isi se sab 6 variables aate hain
+    # (environment, location, vnet_cidr, subnets, nsg_ports, extra_tags).
+    # NOTE: pehle yahan Key-Vault-driven -var flags (TF-ENVIRONMENT,
+    # TF-VNET-CIDR-VAL, etc.) bhi thे "override" ke tor pe - lekin
+    # unki values dev.tfvars se ALAG thi (purani/default values), aur
+    # -var, -var-file ko override kar deta hai. Isi wajah se VNet
+    # "10.0.0.0/16" se ban gaya tha (Key Vault se) jabke subnets
+    # dev.tfvars ke "10.1.x.x" range se the - "Subnet range outside
+    # VNet" error. Ek hi source of truth (dev.tfvars) rakhna zaroori
+    # hai - do jagah se values aana hamesha mismatch ka risk hota hai.
     # -input=false → koi variable phir bhi miss ho to turant CLEAR
     # error de (hang nahi hoga)
     # -out=tfplan → plan file save karo (Infracost isse use karega)
@@ -232,10 +236,6 @@ stages:
         workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
           -var-file=dev.tfvars
-          -var="environment=$(TF-ENVIRONMENT)"
-          -var="location=$(TF-LOCATION)"
-          -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-          -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
           -input=false
           -out=tfplan
         environmentServiceNameAzureRM: 'azure-terraform-connection'
@@ -340,6 +340,15 @@ stages:
       displayName: 'Infracost Cost Breakdown'
       workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
 
+    # Same breakdown, is baar Infracost ke APNE JSON schema mein save
+    # karo (--format=json --out-file=infracost.json). NOTE: "comment"
+    # step ko ye chahiye - Terraform ki plan.json alag schema hai,
+    # infracost comment usay parse nahi kar sakta ("invalid Infracost
+    # JSON file version" error isi wajah se aata tha).
+    - script: infracost breakdown --path plan.json --format json --out-file infracost.json
+      displayName: 'Infracost Breakdown (JSON, PR comment ke liye)'
+      workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
+
     # PR comment ke tor pe bhi cost breakdown post karo
     # NOTE: "azure-repos" subcommand nahi "github" - humara repo
     # GitHub pe hai (Azure Repos ka URL format expect karta tha,
@@ -355,7 +364,7 @@ stages:
     # logs mein already dikh chuka hoga
     - script: |
         infracost comment github \
-          --path=plan.json \
+          --path=infracost.json \
           --repo=$(Build.Repository.Name) \
           --pull-request=$(System.PullRequest.PullRequestNumber) \
           --github-token=$GITHUB_TOKEN \
@@ -419,9 +428,11 @@ stages:
 
           # Terraform Apply
           # Actually Azure mein resources banata hai
-          # Key Vault se variables inject hote hain
           # State file Storage Account mein save hoti hai
-          # $(TF-VNET-CIDR) → Key Vault → "10.0.0.0/16"
+          # -var-file=dev.tfvars hi single source of truth hai (Key
+          # Vault -var overrides hata diye - wo dev.tfvars se ALAG
+          # values rakhte the aur VNet/Subnet CIDR mismatch bug ka
+          # sabab bane, dekho Plan stage ka comment upar)
           - task: TerraformTaskV4@4
             displayName: 'Terraform Apply'
             inputs:
@@ -430,10 +441,6 @@ stages:
               workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
                 -var-file=dev.tfvars
-                -var="environment=$(TF-ENVIRONMENT)"
-                -var="location=$(TF-LOCATION)"
-                -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-                -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
                 -input=false
               environmentServiceNameAzureRM: 'azure-terraform-connection'
 
