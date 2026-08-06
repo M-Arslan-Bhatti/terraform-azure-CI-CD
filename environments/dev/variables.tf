@@ -32,3 +32,14 @@ variable "extra_tags" {
   type    = map(string)
   default = {}
 }
+
+variable "budget_amount" {
+  type        = number
+  description = "Monthly budget amount in USD"
+  default     = 20
+}
+
+variable "budget_alert_email" {
+  type        = string
+  description = "Email to notify at 50/80/100% of budget_amount"
+}

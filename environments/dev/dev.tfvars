@@ -18,3 +18,6 @@ nsg_ports = {
 extra_tags = {
   Owner = "arslan"
 }
+
+budget_amount      = 20
+budget_alert_email = "muhammadarslan196196@gmail.com"
