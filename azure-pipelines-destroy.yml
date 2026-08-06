@@ -1,9 +1,16 @@
 # ═══════════════════════════════════════════════
 # DESTROY PIPELINE
-# trigger: none → Kabhi automatic nahi chalti
+# trigger: none → CI/push pe kabhi automatic nahi chalti
+# pr: none      → PR pe bhi kabhi automatic nahi chalti
+#                 (dono zaroori hain - "trigger: none" akela
+#                 PR-triggering ko nahi rokta, Azure DevOps
+#                 default se PR pe bhi chala deta hai agar
+#                 "pr:" explicitly na diya jaye. Real incident
+#                 isi gap ki wajah se hua tha.)
 # Sirf manual "Run pipeline" se chalti hai
 # ═══════════════════════════════════════════════
 trigger: none
+pr: none
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -32,12 +39,13 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'init'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'  # NAYA: module refactor ke baad .tf files yahan hain, root mein nahi
         backendType: 'azurerm'
         backendServiceArm: 'azure-terraform-connection'
         backendAzureRmResourceGroupName: 'rg-terraform-state'
         backendAzureRmStorageAccountName: 'starslanterraform001'
         backendAzureRmContainerName: 'tfstate'
-        backendAzureRmKey: 'dev.terraform.tfstate'
+        backendAzureRmKey: 'dev-v2.terraform.tfstate'  # NAYA: environments/dev/backend.tf ka actual key
 
     # Yeh step LOGS mein poori DELETE list dikhayega
     - task: TerraformTaskV4@4
@@ -45,12 +53,11 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'plan'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
           -destroy
-          -var="environment=$(TF-ENVIRONMENT)"
-          -var="location=$(TF-LOCATION)"
-          -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-          -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+          -var-file=dev.tfvars
+          -input=false
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ─── STAGE 2: ACTUAL DESTROY (Manual Approval Ke Saath) ───
@@ -77,21 +84,21 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               backendType: 'azurerm'
               backendServiceArm: 'azure-terraform-connection'
               backendAzureRmResourceGroupName: 'rg-terraform-state'
               backendAzureRmStorageAccountName: 'starslanterraform001'
               backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'dev.terraform.tfstate'
+              backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
           - task: TerraformTaskV4@4
             displayName: 'Terraform Destroy'
             inputs:
               provider: 'azurerm'
               command: 'destroy'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
-                -var="environment=$(TF-ENVIRONMENT)"
-                -var="location=$(TF-LOCATION)"
-                -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
-                -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+                -var-file=dev.tfvars
+                -input=false
               environmentServiceNameAzureRM: 'azure-terraform-connection'
