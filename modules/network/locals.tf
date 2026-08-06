@@ -4,5 +4,6 @@ locals {
     Environment = var.environment
     ManagedBy   = "Terraform"
     CostCenter  = "CC-4102"
+    Service     = "networking"  # Infracost "FinOps tags" governance policy ke liye required
   })
 }
