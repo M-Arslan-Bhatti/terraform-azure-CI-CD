@@ -56,10 +56,12 @@ stages:
         workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
           -destroy
+          -var-file=dev.tfvars
           -var="environment=$(TF-ENVIRONMENT)"
           -var="location=$(TF-LOCATION)"
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
           -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+          -input=false
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ─── STAGE 2: ACTUAL DESTROY (Manual Approval Ke Saath) ───
@@ -101,8 +103,10 @@ stages:
               command: 'destroy'
               workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
+                -var-file=dev.tfvars
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
                 -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
                 -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+                -input=false
               environmentServiceNameAzureRM: 'azure-terraform-connection'

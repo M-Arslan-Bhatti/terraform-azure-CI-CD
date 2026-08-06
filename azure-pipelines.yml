@@ -215,12 +215,15 @@ stages:
         backendAzureRmKey: 'dev-v2.terraform.tfstate'
 
     # Terraform Plan
-    # commandOptions mein Key Vault se variables inject hote hain
-    # $(TF-ENVIRONMENT) → Key Vault → "dev"
-    # $(TF-LOCATION)    → Key Vault → "uksouth"
-    # $(TF-OWNER)       → Key Vault → "arslan"
-    # $(TF-VNET-CIDR)   → Key Vault → "10.0.0.0/16"
-    # -out=tfplan       → plan file save karo (Infracost isse use karega)
+    # -var-file=dev.tfvars → NAYA, zaroori hai. subnets aur nsg_ports
+    # (jinki koi default value nahi hai variables.tf mein) sirf isi
+    # file se milte hain - warna Terraform interactively poochta hai
+    # aur CI mein hang/cancel ho jata hai.
+    # -var flags neeche Key Vault se OVERRIDE ke tor pe chalte hain
+    # (dev.tfvars ke defaults ko override kar sakte hain agar chahiye ho)
+    # -input=false → koi variable phir bhi miss ho to turant CLEAR
+    # error de (hang nahi hoga)
+    # -out=tfplan → plan file save karo (Infracost isse use karega)
     - task: TerraformTaskV4@4
       displayName: 'Terraform Plan'
       inputs:
@@ -228,10 +231,12 @@ stages:
         command: 'plan'
         workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
         commandOptions: >-
+          -var-file=dev.tfvars
           -var="environment=$(TF-ENVIRONMENT)"
           -var="location=$(TF-LOCATION)"
           -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
           -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+          -input=false
           -out=tfplan
         environmentServiceNameAzureRM: 'azure-terraform-connection'
 
@@ -422,10 +427,12 @@ stages:
               command: 'apply'
               workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
               commandOptions: >-
+                -var-file=dev.tfvars
                 -var="environment=$(TF-ENVIRONMENT)"
                 -var="location=$(TF-LOCATION)"
                 -var="extra_tags={Owner=\"$(TF-OWNER)\"}"
                 -var="vnet_cidr=$(TF-VNET-CIDR-VAL)"
+                -input=false
               environmentServiceNameAzureRM: 'azure-terraform-connection'
 
 # ───────────────────────────────────────────────
