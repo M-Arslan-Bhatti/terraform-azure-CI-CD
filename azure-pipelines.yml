@@ -340,30 +340,32 @@ stages:
       displayName: 'Infracost Cost Breakdown'
       workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
 
-    # OPTIONAL: PR comment ke tor pe bhi cost breakdown post karo
-    # NOTE: yeh sirf tab kaam karega jab:
-    #   1. Pipeline PR trigger se chali ho (abhi trigger sirf
-    #      "main" branch push pe hai, PR pe nahi - upar "trigger:"
-    #      section mein "pr:" add karna hoga isko fully activate karne ke liye)
-    #   2. Build service ko PR pe comment likhne ki permission ho
-    #      (Project Settings → Repositories → Security mein
-    #      "Contribute to pull requests" allow karna padega)
-    # continueOnError: true rakha hai taake agar yeh feature
-    # kisi wajah se available na ho to poori pipeline fail na ho -
-    # cost breakdown to upar logs mein already dikh chuka hoga
+    # PR comment ke tor pe bhi cost breakdown post karo
+    # NOTE: "azure-repos" subcommand nahi "github" - humara repo
+    # GitHub pe hai (Azure Repos ka URL format expect karta tha,
+    # isliye pehle "Invalid repo URL format" error aata tha)
+    # --repo: Build.Repository.Name GitHub ke liye "owner/repo" deta hai
+    # --pull-request: PullRequestNumber use kiya, PullRequestId NAHI -
+    #   GitHub PRs ke liye ye alag hote hain, PullRequestId Azure
+    #   Repos-specific hai aur GitHub API isay accept nahi karega
+    # --github-token: naya PAT chahiye (GITHUB-PAT-INFRACOST secret,
+    #   Key Vault mein add kiya, "repo" scope ke saath)
+    # continueOnError: true rakha hai taake agar ye step kisi wajah se
+    # fail ho to poori pipeline fail na ho - cost breakdown to upar
+    # logs mein already dikh chuka hoga
     - script: |
-        infracost comment azure-repos \
-          --path plan.json \
-          --repo-url "$(Build.Repository.Uri)" \
-          --pull-request "$(System.PullRequest.PullRequestId)" \
-          --azure-access-token "$SYSTEM_ACCESSTOKEN" \
-          --behavior update
+        infracost comment github \
+          --path=plan.json \
+          --repo=$(Build.Repository.Name) \
+          --pull-request=$(System.PullRequest.PullRequestNumber) \
+          --github-token=$GITHUB_TOKEN \
+          --behavior=update
       displayName: 'Infracost PR Comment (agar PR build ho)'
       workingDirectory: '$(System.DefaultWorkingDirectory)/environments/dev'
       condition: eq(variables['Build.Reason'], 'PullRequest')
       continueOnError: true
       env:
-        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        GITHUB_TOKEN: $(GITHUB-PAT-INFRACOST)
 
 # ───────────────────────────────────────────────
 # STAGE 6: APPLY
